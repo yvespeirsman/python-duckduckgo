@@ -1,19 +1,11 @@
-# duckduckgo.py - Library for querying the DuckDuckGo API
-#
-# Copyright (c) 2010 Michael Stephens <me@mikej.st>
-# Copyright (c) 2012-2013 Michael Smith <crazedpsyc@gshellz.org>
-#
-# See LICENSE for terms of usage, modification and redistribution.
-
-import urllib
-import urllib2
+import requests
 import json as j
 import sys
 
 __version__ = 0.242
 
 
-def query(query, useragent='python-duckduckgo '+str(__version__), safesearch=True, html=False, meanings=True, **kwargs):
+def query(query, useragent='python-duckduckgo '+str(__version__), html=False, **kwargs):
     """
     Query DuckDuckGo, returning a Results object.
 
@@ -29,31 +21,22 @@ def query(query, useragent='python-duckduckgo '+str(__version__), safesearch=Tru
 
     Keword arguments:
     useragent: UserAgent to use while querying. Default: "python-duckduckgo %d" (str)
-    safesearch: True for on, False for off. Default: True (bool)
     html: True to allow HTML in output. Default: False (bool)
-    meanings: True to include disambiguations in results (bool)
     Any other keyword arguments are passed directly to DuckDuckGo as URL params.
     """ % __version__
 
-    safesearch = '1' if safesearch else '-1'
     html = '0' if html else '1'
-    meanings = '0' if meanings else '1'
     params = {
         'q': query,
-        'o': 'json',
-        'kp': safesearch,
+        'format': 'json',
         'no_redirect': '1',
-        'no_html': html,
-        'd': meanings,
+        'no_html': html
         }
     params.update(kwargs)
-    encparams = urllib.urlencode(params)
-    url = 'http://api.duckduckgo.com/?' + encparams
+    url = 'http://api.duckduckgo.com/'
 
-    request = urllib2.Request(url, headers={'User-Agent': useragent})
-    response = urllib2.urlopen(request)
-    json = j.loads(response.read())
-    response.close()
+    response = requests.get(url, params=params)
+    json = j.loads(response.text)
 
     return Results(json)
 
@@ -138,10 +121,10 @@ def get_zci(q, web_fallback=True, priority=['answer', 'abstract', 'related.0', '
     '''A helper method to get a single (and hopefully the best) ZCI result.
     priority=list can be used to set the order in which fields will be checked for answers.
     Use web_fallback=True to fall back to grabbing the first web result.
-    passed to query. This method will fall back to 'Sorry, no results.' 
+    passed to query. This method will fall back to 'Sorry, no results.'
     if it cannot find anything.'''
 
-    ddg = query('\\'+q, **kwargs)
+    ddg = query(q, **kwargs)
     response = ''
 
     for p in priority:
@@ -150,13 +133,13 @@ def get_zci(q, web_fallback=True, priority=['answer', 'abstract', 'related.0', '
         index = int(ps[1]) if len(ps) > 1 else None
 
         result = getattr(ddg, type)
-        if index is not None: 
+        if index is not None:
             if not hasattr(result, '__getitem__'): raise TypeError('%s field is not indexable' % type)
             result = result[index] if len(result) > index else None
         if not result: continue
 
         if result.text: response = result.text
-        if result.text and hasattr(result,'url') and urls: 
+        if result.text and hasattr(result,'url') and urls:
             if result.url: response += ' (%s)' % result.url
         if response: break
 
@@ -166,7 +149,7 @@ def get_zci(q, web_fallback=True, priority=['answer', 'abstract', 'related.0', '
             response = ddg.redirect.url
 
     # final fallback
-    if not response: 
+    if not response:
         response = 'Sorry, no results.'
 
     return response
@@ -178,8 +161,8 @@ def main():
         keys.sort()
         for key in keys:
             sys.stdout.write(key)
-            if type(q.json[key]) in [str,unicode,int]: print(':', q.json[key])
-            else: 
+            if type(q.json[key]) in [str,unicode]: print(':', q.json[key])
+            else:
                 sys.stdout.write('\n')
                 for i in q.json[key]: print('\t',i)
     else:
